@@ -11,7 +11,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:8080"}})
+CORS(app, resources={r"/api/*": {"origins": "https://api.linkuni.in"}})
 
 # Set up AWS Bedrock client
 bedrock_runtime = boto3.client(
@@ -106,4 +106,4 @@ def test():
     return jsonify({"message": "Hello, World!"})
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)
