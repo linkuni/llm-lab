@@ -13,6 +13,8 @@ The service extracts text from PDFs, recursively chunks and summarizes content, 
 - **Context-Aware Summarization:** Each chunk summary is enriched with global document context for coherence and completeness.
 - **Bedrock Llama 3 Optimized:** Uses the required prompt formatting for reliable responses from AWS Bedrock Llama 3 models.
 - **Automatic Retry:** Retries summarization if the model returns an empty response.
+- **Modular Architecture:** Uses a standard Flask application structure with proper separation of concerns for easy extension and maintenance.
+- **Question Generation:** Automatically generates exam-style questions with answers, key points, and tips for maximizing marks.
 
 ---
 
@@ -32,6 +34,12 @@ The service extracts text from PDFs, recursively chunks and summarizes content, 
 ### 4. **Prompt Engineering & Token Optimization**
 - Prompts are carefully designed for clarity, conciseness, and structure, and use the required AWS Bedrock Llama 3 format to avoid empty or malformed responses.
 - Only relevant keys are included in the final summary, with lists for `main_points` and `important_terms`, and strings for others.
+
+### 5. **Question Generation**
+- **Chunking:** Document is split into semantically coherent chunks to maintain context.
+- **Context-Awareness:** Questions are generated with awareness of the entire document's context.
+- **Deduplication:** Similar questions are filtered out to ensure variety and relevance.
+- **Comprehensive Answers:** Each question includes an ideal answer, key points for full marks, and tips for maximizing scores.
 
 ---
 
@@ -73,6 +81,39 @@ The service extracts text from PDFs, recursively chunks and summarizes content, 
 ```
 - Only relevant keys are included for each document.
 
+### **POST** `/api/v1/generate-questions`
+
+#### **Request**
+- `file`: PDF file (multipart/form-data)
+- `max_questions` (optional): Maximum number of questions per chunk (default: 5)
+- `max_words` (optional): Maximum words per chunk (default: 400)
+
+#### **Response**
+```js
+{
+"questions": [
+{
+"question": "What are the key characteristics of cloud computing?",
+"answer": "Cloud computing is characterized by on-demand self-service, broad network access, resource pooling, rapid elasticity, and measured service. These characteristics enable organizations to access computing resources without significant upfront investment while scaling as needed.",
+"key_points": [
+"On-demand self-service without human interaction",
+"Broad network access from various devices",
+"Resource pooling with multi-tenancy",
+"Rapid elasticity and scalability",
+"Measured service with pay-as-you-go model"
+],
+"tips": [
+"Use specific examples for each characteristic",
+"Explain the business impact of each feature",
+"Compare with traditional computing models",
+"Cite industry standards or NIST definitions"
+]
+},
+// More questions...
+]
+}
+```
+
 ---
 
 ## Methods Used to Enhance Summaries with Limited Tokens
@@ -91,6 +132,27 @@ The service extracts text from PDFs, recursively chunks and summarizes content, 
 - Prompts are structured for clarity, minimal redundancy, and required output format.
 - Uses Bedrock Llama 3's required prompt tokens for reliable results.
 - Only relevant keys are included in the output, optimizing token usage.
+
+---
+
+## Development
+
+### Setup
+1. Clone the repository
+2. Install dependencies: `pip install -r requirements.txt`
+3. Create a `.env` file with your AWS credentials and other settings:
+   ```
+   AWS_REGION=your-region
+   AWS_ACCESS_KEY_ID=your-key-id
+   AWS_SECRET_ACCESS_KEY=your-secret-key
+   CORS_ORIGIN=your-frontend-origin
+   ```
+4. Run the application: `python run.py`
+
+### Adding New Features
+1. Create a new service module in `app/services/` for business logic
+2. Implement new API endpoints in `app/api/v1/routes.py` or create a new version in `app/api/v2/`
+3. Update the configuration in `app/config.py` if needed
 
 ---
 

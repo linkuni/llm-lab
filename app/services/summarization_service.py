@@ -1,32 +1,5 @@
-"""
-NOTE: This file is deprecated and kept for reference only.
-The codebase has been restructured to follow a standard Flask application structure.
-Please use the new modular structure by running the application with:
-    python run.py
-"""
-
-import os
 import json
-from flask import Flask, request, jsonify
-import fitz  # PyMuPDF
-from flask_cors import CORS
-import boto3
-from dotenv import load_dotenv
-import spacy
-
-load_dotenv()
-
-app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "https://api.linkuni.in"}})
-
-nlp = spacy.load("en_core_web_sm")
-
-bedrock_runtime = boto3.client(
-    service_name='bedrock-runtime',
-    region_name=os.getenv('AWS_REGION'),
-    aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-    aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
-)
+from app.extensions import get_nlp, get_bedrock_client
 
 SUMMARY_KEYS = [
     "title",
@@ -40,7 +13,15 @@ SUMMARY_KEYS = [
 ]
 
 def format_llama3_prompt(user_prompt):
-    # Required format for Llama 3 on AWS Bedrock
+    """
+    Format prompt for Llama 3 model on AWS Bedrock
+    
+    Args:
+        user_prompt (str): The user prompt content
+        
+    Returns:
+        str: Formatted prompt for Llama 3
+    """
     return (
         "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n"
         + user_prompt +
@@ -48,10 +29,22 @@ def format_llama3_prompt(user_prompt):
     )
 
 def smart_chunk_text(text, max_words=400):
+    """
+    Split text into semantic chunks using spaCy
+    
+    Args:
+        text (str): Text to be chunked
+        max_words (int): Maximum words per chunk
+        
+    Returns:
+        list: List of text chunks
+    """
+    nlp = get_nlp()
     doc = nlp(text)
     chunks = []
     current_chunk = []
     current_len = 0
+    
     for sent in doc.sents:
         sent_words = len(sent.text.split())
         if current_len + sent_words > max_words and current_chunk:
@@ -60,20 +53,74 @@ def smart_chunk_text(text, max_words=400):
             current_len = 0
         current_chunk.append(sent.text)
         current_len += sent_words
+        
     if current_chunk:
         chunks.append(" ".join(current_chunk))
+        
     return chunks
 
+def extract_json_from_text(text):
+    """
+    Extract a JSON object from text that may contain markdown code blocks or other text
+    
+    Args:
+        text (str): Text potentially containing JSON
+        
+    Returns:
+        dict: Extracted JSON object or error
+    """
+    # Check if the text contains a code block with JSON
+    if "```" in text:
+        # Extract content between code blocks
+        parts = text.split("```")
+        for i in range(1, len(parts), 2):
+            try:
+                # Try to parse as JSON, removing language identifier if present
+                content = parts[i].strip()
+                if content.startswith("json"):
+                    content = content[4:].strip()
+                return json.loads(content)
+            except json.JSONDecodeError:
+                continue
+    
+    # If no valid JSON in code blocks, try parsing the whole text
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # As a last resort, try to find anything that looks like a JSON object
+        try:
+            start = text.find('{')
+            end = text.rfind('}') + 1
+            if start != -1 and end > start:
+                return json.loads(text[start:end])
+        except:
+            pass
+            
+    return {"error": "Could not extract valid JSON from response"}
+
 def summarize_text(text, context=None, is_final=False):
+    """
+    Generate summary using AWS Bedrock
+    
+    Args:
+        text (str): Text to summarize
+        context (dict, optional): Context for the summarization
+        is_final (bool): Whether this is the final summary
+        
+    Returns:
+        dict: Summary in JSON format
+    """
+    bedrock_runtime = get_bedrock_client()
+    
     if is_final:
         user_prompt = (
             "You are an expert academic summarization assistant. Summarize the following document as a JSON object with the following keys if relevant: "
             "title, overview, main_points, important_terms, benefits, risks_or_limitations, recommendations, conclusion. "
             "Only include keys that are relevant and present in the document. "
             "main_points and important_terms should be lists; others should be strings. "
-            "Do not include empty or placeholder values. Respond with a valid JSON object and no other text.\n\n"
+            "Do not include empty or placeholder values. Respond with a valid JSON object and no other text, no markdown formatting, no ```json tags.\n\n"
             "Here are the chunk summaries:\n"
-            "```"
+            "```\n"
             f"{text}\n"
             "```"
         )
@@ -84,13 +131,15 @@ def summarize_text(text, context=None, is_final=False):
             + "Summarize the key points from this section that relate to the following aspects: title, overview, main_points, important_terms, benefits, risks_or_limitations, recommendations, conclusion. "
             "Only include keys that are relevant and present in the section. "
             "main_points and important_terms should be lists; others should be strings. "
-            "Do not include empty or placeholder values. Respond with a valid JSON object and no other text.\n"
+            "Do not include empty or placeholder values. Respond with a valid JSON object and no other text, no markdown formatting, no ```json tags.\n"
             "Here is the section:\n"
-            "```"
+            "```\n"
             f"{text}\n"
             "```"
         )
+    
     prompt = format_llama3_prompt(user_prompt)
+    
     try:
         request_body = json.dumps({
             "prompt": prompt,
@@ -98,6 +147,7 @@ def summarize_text(text, context=None, is_final=False):
             "temperature": 0.3,
             "top_p": 0.9
         })
+        
         for _ in range(3):  # Retry up to 3 times if summary is empty
             response = bedrock_runtime.invoke_model(
                 modelId="meta.llama3-70b-instruct-v1:0",
@@ -105,72 +155,50 @@ def summarize_text(text, context=None, is_final=False):
                 accept="application/json",
                 body=request_body
             )
+            
             response_body = json.loads(response['body'].read().decode('utf-8'))
-            summary = response_body.get('generation', '')
-            summary = summary.strip()
+            summary = response_body.get('generation', '').strip()
+            
             if summary:
                 try:
-                    # Try to parse JSON output for safety
+                    # First try to directly parse as JSON
                     return json.loads(summary)
-                except Exception:
-                    return summary
+                except json.JSONDecodeError:
+                    # If direct parsing fails, try to extract JSON from text
+                    return extract_json_from_text(summary)
+                    
         return {"error": "Failed to generate summary (empty response)."}
     except Exception as e:
         print(f"Error in summarization: {str(e)}")
-        return {"error": "Failed to generate summary."}
+        return {"error": f"Failed to generate summary: {str(e)}"}
 
 def recursive_summarize(text, max_words=400):
+    """
+    Recursively summarize text by chunking and then combining summaries
+    
+    Args:
+        text (str): Text to summarize
+        max_words (int): Maximum words per chunk
+        
+    Returns:
+        dict: Final summary in JSON format
+    """
     chunks = smart_chunk_text(text, max_words=max_words)
     global_context = summarize_text(text[:min(len(text), 4000)], is_final=False)
     chunk_summaries = []
+    
     for chunk in chunks:
         summary = summarize_text(chunk, context=global_context)
-        chunk_summaries.append(json.dumps(summary))
+        # Ensure we're dealing with string representation of JSON objects
+        if isinstance(summary, dict):
+            chunk_summaries.append(json.dumps(summary))
+        else:
+            chunk_summaries.append(str(summary))
+        
     combined_summary = "\n\n".join(chunk_summaries)
+    
     if len(combined_summary.split()) > max_words * 2:
         return recursive_summarize(combined_summary, max_words=max_words)
+        
     final_summary = summarize_text(combined_summary, is_final=True)
-    return final_summary
-
-@app.route('/api/v1/extract-text', methods=['POST'])
-def extract_text():
-    print("extract_text called")
-    if 'file' not in request.files:
-        return jsonify({"error": "No file provided"}), 400
-
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({"error": "No file selected"}), 400
-
-    temp_path = "temp.pdf"
-    file.save(temp_path)
-
-    try:
-        doc = fitz.open(temp_path)
-        result = {}
-        all_text = ""
-        for i, page in enumerate(doc):
-            text = page.get_text()
-            result[i+1] = text
-            all_text += text + "\n"
-        doc.close()
-        os.remove(temp_path)
-
-        summary = recursive_summarize(all_text, max_words=400)
-
-        return jsonify({
-            "text": result,
-            "summary": summary
-        })
-
-    except Exception as e:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/v1/test', methods=['GET'])
-def test():
-    return jsonify({"message": "Hello, World!"})
-
-if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=5678)
+    return final_summary 
