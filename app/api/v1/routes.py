@@ -3,14 +3,17 @@ import os
 from app.services.pdf_service import extract_text_from_pdf, save_temp_file, remove_temp_file
 from app.services.summarization_service import recursive_summarize
 from app.services.question_service import recursive_generate_questions
+from app.services.image_to_text_service import extract_text_from_file
+from app.services.academic_assistant_service import generate_answers_for_all_questions
+from app.services.preprocess import preprocess_question_paper
 
 # Create blueprint for API v1
 api_v1 = Blueprint('api_v1', __name__, url_prefix='/api/v1')
 
-@api_v1.route('/extract-text', methods=['POST'])
-def extract_text():
+@api_v1.route('/summarize', methods=['POST'])
+def summarize():
     """Endpoint to extract text from PDF and generate a summary"""
-    print("extract_text called")
+    print("summarize called")
     
     if 'file' not in request.files:
         return jsonify({"error": "No file provided"}), 400
@@ -87,6 +90,41 @@ def generate_questions():
     except Exception as e:
         # Ensure temporary file is removed in case of error
         remove_temp_file(temp_path)
+        return jsonify({"error": str(e)}), 500
+
+@api_v1.route('/academic-assistant', methods=['POST'])
+def academic_assistant():
+    """Endpoint to extract text from an image or PDF and generate academic answers"""
+    print("academic_assistant called")
+    
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+    
+    try:
+        # Extract text from the uploaded file (image or PDF)
+        extracted_text = extract_text_from_file(file)
+
+        # Preprocess the extracted text
+        preprocessed_text = preprocess_question_paper(extracted_text)
+        
+        # Generate academic answer using Llama
+        model_response = generate_answers_for_all_questions(preprocessed_text)
+        
+        # Ensure model_response is a dictionary
+        if not isinstance(model_response, dict):
+            model_response = {"error": "Failed to generate a structured response", "raw_response": str(model_response)}
+        
+        return jsonify({
+            "extracted_text": extracted_text,
+            "preprocessed_text": preprocessed_text,
+            "answer": model_response
+        })
+
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @api_v1.route('/test', methods=['GET'])

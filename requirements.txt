@@ -4,4 +4,6 @@ flask-cors==4.0.0
 boto3==1.29.0
 python-dotenv==1.0.0
 spacy==3.7.2
-en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0-py3-none-any.whl 
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0-py3-none-any.whl
+pillow==10.0.0
+requests==2.31.0 

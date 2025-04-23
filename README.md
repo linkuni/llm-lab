@@ -15,6 +15,7 @@ The service extracts text from PDFs, recursively chunks and summarizes content, 
 - **Automatic Retry:** Retries summarization if the model returns an empty response.
 - **Modular Architecture:** Uses a standard Flask application structure with proper separation of concerns for easy extension and maintenance.
 - **Question Generation:** Automatically generates exam-style questions with answers, key points, and tips for maximizing marks.
+- **Academic Assistant:** Extracts text from images (JPEG, PNG) or PDFs and generates comprehensive, well-structured exam answers.
 
 ---
 
@@ -45,7 +46,7 @@ The service extracts text from PDFs, recursively chunks and summarizes content, 
 
 ## API Usage
 
-### **POST** `/api/v1/extract-text`
+### **POST** `/api/v1/summarize`
 
 #### **Request**
 - `file`: PDF file (multipart/form-data)
@@ -114,6 +115,39 @@ The service extracts text from PDFs, recursively chunks and summarizes content, 
 }
 ```
 
+### **POST** `/api/v1/academic-assistant`
+
+#### **Request**
+- `file`: Image (JPEG, PNG) or PDF file (multipart/form-data)
+
+#### **Response**
+```js
+{
+  "extracted_text": "What are the key differences between TCP and UDP protocols?",
+  "answer": {
+    "question": "What are the key differences between TCP and UDP protocols?",
+    "introduction": "Transmission Control Protocol (TCP) and User Datagram Protocol (UDP) are two fundamental protocols within the Internet Protocol (IP) suite that facilitate data transmission across networks.",
+    "key_concepts": [
+      "TCP (Transmission Control Protocol): A connection-oriented protocol that establishes a connection before data transfer begins",
+      "UDP (User Datagram Protocol): A connectionless protocol with minimal overhead that sends data as independent packets",
+      "Reliability: TCP provides guaranteed delivery through acknowledgment mechanisms, while UDP offers no such guarantees"
+    ],
+    "main_content": "TCP and UDP serve different purposes in network communications. TCP focuses on reliability and ordered delivery, while UDP prioritizes speed and efficiency. TCP uses handshakes, acknowledgments, flow control, and congestion mechanisms to ensure data integrity, making it suitable for applications where accuracy is critical. UDP, being connectionless, has lower overhead and latency, making it ideal for real-time applications where some data loss is acceptable.",
+    "examples": [
+      "TCP is used for web browsing (HTTP/HTTPS), email (SMTP, IMAP), and file transfers (FTP)",
+      "UDP is used for live streaming, online gaming, VoIP, and DNS lookups"
+    ],
+    "conclusion": "The choice between TCP and UDP depends on application requirements. TCP provides reliability at the cost of overhead and latency, while UDP offers speed and lower overhead but without guaranteed delivery.",
+    "tips_for_maximum_marks": [
+      "Clearly distinguish between connection-oriented and connectionless protocols",
+      "Mention specific technical details like TCP sequence numbers and UDP's lightweight header",
+      "Use networking terminology accurately (segments for TCP, datagrams for UDP)",
+      "Explain real-world applications for each protocol"
+    ]
+  }
+}
+```
+
 ---
 
 ## Methods Used to Enhance Summaries with Limited Tokens
@@ -165,4 +199,6 @@ The service extracts text from PDFs, recursively chunks and summarizes content, 
 - python-dotenv
 - PyMuPDF
 - spaCy (`en_core_web_sm`)
+- Pillow
+- requests
 
